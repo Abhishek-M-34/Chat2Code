@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Web Architect</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* --- STYLES --- */
+        body { margin: 0; font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; display: flex; height: 100vh; overflow: hidden; }
+
+        /* LEFT: CHAT */
+        .chat-sidebar { width: 350px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; }
+        .chat-header { padding: 20px; border-bottom: 1px solid #334155; background: #0f172a; }
+        .chat-header h2 { margin: 0; font-size: 1.1rem; color: #fff; }
+        
+        .messages { flex-grow: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+        .msg { padding: 12px; border-radius: 8px; font-size: 0.9rem; max-width: 90%; line-height: 1.5; }
+        .msg-ai { align-self: flex-start; background: #334155; color: #e2e8f0; }
+        .msg-user { align-self: flex-end; background: #3b82f6; color: white; }
+
+        .input-area { padding: 20px; border-top: 1px solid #334155; display: flex; gap: 10px; }
+        textarea { flex-grow: 1; background: #0f172a; border: 1px solid #334155; color: white; padding: 10px; border-radius: 6px; resize: none; height: 45px; outline: none; }
+        .send-btn { background: #3b82f6; border: none; color: white; width: 50px; border-radius: 6px; cursor: pointer; }
+        .send-btn:hover { background: #2563eb; }
+
+        /* RIGHT: HYBRID WORKSPACE */
+        .workspace { flex-grow: 1; display: flex; flex-direction: column; background: #000; }
+        
+        /* TOOLBAR */
+        .toolbar { height: 50px; background: #0f172a; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+        
+        .tabs { display: flex; gap: 5px; background: #1e293b; padding: 4px; border-radius: 8px; }
+        .tab { padding: 8px 16px; font-size: 0.85rem; cursor: pointer; color: #94a3b8; border-radius: 6px; transition: 0.2s; }
+        .tab:hover { color: white; }
+        .tab.active { background: #3b82f6; color: white; font-weight: 500; }
+
+        .actions { display: flex; gap: 10px; }
+        .action-btn { background: #1e293b; border: 1px solid #334155; color: #94a3b8; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; }
+        .action-btn:hover { background: #334155; color: white; }
+
+        /* CONTENT */
+        .content-area { flex-grow: 1; position: relative; }
+        
+        iframe { width: 100%; height: 100%; border: none; background: white; display: block; }
+        
+        .code-container { display: none; width: 100%; height: 100%; background: #0d1117; }
+        textarea.code-editor { width: 100%; height: 100%; background: transparent; color: #c9d1d9; border: none; padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; resize: none; outline: none; }
+        
+        /* Loading */
+        .loader { display: none; color: #94a3b8; font-size: 0.85rem; margin-left: 10px; margin-bottom: 5px; }
+
+    </style>
+</head>
+<body>
+
+    <div class="chat-sidebar">
+        <div class="chat-header">
+            <h2>AI Web Architect</h2>
+        </div>
+        <div class="messages" id="chat-box">
+            <div class="msg msg-ai">
+                I build websites you can copy! 
+                <br><br>
+                Try: <em>"Create an Obsidian Graph Portfolio for Alex."</em>
+            </div>
+        </div>
+        <div class="loader" id="loader">Thinking & Coding...</div>
+        <div class="input-area">
+            <textarea id="prompt" placeholder="Describe your site..."></textarea>
+            <button class="send-btn" onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+    </div>
+
+    <div class="workspace">
+        <div class="toolbar">
+            <div class="tabs">
+                <div class="tab active" onclick="switchView('preview')" id="tab-preview">
+                    <i class="fa-regular fa-eye"></i> Visual
+                </div>
+                <div class="tab" onclick="switchView('code')" id="tab-code">
+                    <i class="fa-solid fa-code"></i> Source Code
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="action-btn" onclick="copyCode()">
+                    <i class="fa-regular fa-copy"></i> Copy to VS Code
+                </button>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <iframe id="preview-frame"></iframe>
+            
+            <div class="code-container" id="code-container">
+                <textarea class="code-editor" id="code-editor" readonly></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentHtml = "";
+
+        // 1. SWITCH VIEWS
+        function switchView(mode) {
+            document.getElementById('tab-preview').className = `tab ${mode === 'preview' ? 'active' : ''}`;
+            document.getElementById('tab-code').className = `tab ${mode === 'code' ? 'active' : ''}`;
+            
+            document.getElementById('preview-frame').style.display = mode === 'preview' ? 'block' : 'none';
+            document.getElementById('code-container').style.display = mode === 'code' ? 'block' : 'none';
+        }
+
+        // 2. COPY CODE
+        function copyCode() {
+            if(!currentHtml) return alert("Generate a website first!");
+            navigator.clipboard.writeText(currentHtml).then(() => {
+                alert("Code copied! You can now paste it into index.html in VS Code.");
+            });
+        }
+
+        // 3. RENDER LOGIC
+        function renderSite(html) {
+            currentHtml = html;
+            
+            // Update Visual
+            const iframe = document.getElementById('preview-frame');
+            iframe.contentDocument.open();
+            iframe.contentDocument.write(html);
+            iframe.contentDocument.close();
+
+            // Update Code View
+            document.getElementById('code-editor').value = html;
+        }
+
+        // 4. CHAT LOGIC
+        async function sendMessage() {
+            const input = document.getElementById('prompt');
+            const text = input.value.trim();
+            if(!text) return;
+
+            addMessage(text, 'user');
+            input.value = '';
+            document.getElementById('loader').style.display = 'block';
+
+            try {
+                const res = await fetch('/chat_update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ prompt: text, current_html: currentHtml })
+                });
+                const data = await res.json();
+                
+                document.getElementById('loader').style.display = 'none';
+                
+                if(data.html) {
+                    addMessage(data.message, 'ai');
+                    renderSite(data.html);
+                } else {
+                    addMessage("I couldn't generate the code. Try again.", 'ai');
+                }
+            } catch(e) {
+                document.getElementById('loader').style.display = 'none';
+                addMessage("Error: " + e.message, 'ai');
+            }
+        }
+
+        function addMessage(text, sender) {
+            const box = document.getElementById('chat-box');
+            const div = document.createElement('div');
+            div.className = `msg msg-${sender}`;
+            div.innerHTML = text;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // Enter Key
+        document.getElementById('prompt').addEventListener('keypress', (e) => {
+            if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        });
+    </script>
+</body>
+</html>
